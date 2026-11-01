@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Studio Admin</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:#111118;color:#f2efe8}
+header{position:sticky;top:0;z-index:5;background:#111118ee;border-bottom:1px solid #fff2;padding:12px 5vw;display:flex;gap:14px;align-items:center;justify-content:space-between}
+h1{font-size:1.1rem;margin:0}main{padding:20px 5vw 80px;max-width:1300px;margin:auto}
+h2{margin:34px 0 4px;font-size:1.2rem}.hint{color:#a9a7b2;margin:0 0 12px;font-size:.85rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.slot{background:#1a1a24;border:1px solid #fff2;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.th{aspect-ratio:3/4;border-radius:8px;background:#0b0b10 center/cover no-repeat;display:grid;place-items:center;color:#777;font-size:.8rem;overflow:hidden}
+.slot b{font-size:.78rem;color:#a9a7b2;font-weight:600}.row{display:flex;gap:6px}
+button,.btn{font:inherit;font-size:.8rem;border:0;border-radius:8px;padding:7px 10px;background:#ff4a63;color:#fff;cursor:pointer;flex:1;text-align:center}
+button.g{background:#ffffff1f}button:disabled{opacity:.5}
+input[type=password]{font:inherit;padding:9px 12px;border-radius:8px;border:1px solid #fff3;background:#1a1a24;color:inherit}
+#login{max-width:360px;margin:20vh auto;display:flex;flex-direction:column;gap:10px;padding:0 20px}
+#msg{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#000c;padding:10px 18px;border-radius:99px;display:none;z-index:9}
+.sec-h{display:flex;justify-content:space-between;align-items:end;gap:10px;flex-wrap:wrap}.sec-h .btn{flex:none}
+</style></head><body>
+<div id="login"><h1>Studio Admin</h1><input id="pw" type="password" placeholder="Admin password"><button id="go">Log in</button></div>
+<div id="app" hidden><header><h1>📸 Photo manager</h1><div><a href="/" style="color:#ff4a63;margin-right:14px">View site</a><button class="g" id="out">Log out</button></div></header><main id="main"></main></div>
+<div id="msg"></div>
+<script>
+var SEC=[["Site","Background photo and logo.",[["bg","Background",1],["logo","Logo",1]]],["Gallery – Our work","The 8 photos shown in the 3D frames.",8,"gal"],
+["Passport Photos","","cat-passport"],["Visa Photos","","cat-visa"],["Wedding Photography","","cat-wedding"],["Photo Frames","","cat-frames"],["Albums","Each album shows 2 photos side by side (slots 1+2, 3+4, 5+6, 7+8).","cat-albums"],["Professional Photoshoots","","cat-photoshoot"],["Product Photography","","cat-product"]];
+var $=function(i){return document.getElementById(i)},pw=sessionStorage.pw||"",M={};
+function msg(t){var m=$("msg");m.textContent=t;m.style.display="block";clearTimeout(msg.t);msg.t=setTimeout(function(){m.style.display="none"},2600)}
+function api(m,slot,body){return fetch("/api/upload"+(slot?"?slot="+slot:""),{method:m,headers:{"x-admin-password":pw},body:body}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||"Failed");return j})})}
+// shrink + compress in the browser so uploads stay small and never break the layout
+async function shrink(f,max){var bm=await createImageBitmap(f,{imageOrientation:"from-image"});var k=Math.min(1,max/Math.max(bm.width,bm.height));
+ var c=document.createElement("canvas");c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);c.getContext("2d").drawImage(bm,0,0,c.width,c.height);
+ var q=.85,b;do{b=await new Promise(function(r){c.toBlob(r,"image/webp",q)});q-=.1}while(b&&b.size>1.5e6&&q>.3);
+ if(!b||b.type!=="image/webp")b=await new Promise(function(r){c.toBlob(r,"image/jpeg",.8)});return b}
+async function up(slot,f){if(!f||!/^image\//.test(f.type))return msg("Choose an image file");if(f.size>40e6)return msg("File over 40 MB");
+ msg("Uploading…");try{var b=await shrink(f,slot==="bg"?2200:1600);var j=await api("POST",slot,b);M[slot]=j.url;paint(slot);msg("Saved ✔")}catch(e){msg("Error: "+e.message)}}
+function paint(s){var t=document.querySelector('[data-t="'+s+'"]');if(!t)return;t.style.backgroundImage=M[s]?'url("'+M[s]+'")':"";t.textContent=M[s]?"":"Empty (default)"}
+function slotEl(id,label){var d=document.createElement("div");d.className="slot";d.innerHTML='<div class="th" data-t="'+id+'"></div><b>'+label+'</b><div class="row"><label class="btn">Upload<input type="file" accept="image/*" hidden></label><button class="g">✕</button></div>';
+ d.querySelector("input").onchange=function(e){up(id,e.target.files[0]);e.target.value=""};
+ d.querySelector("button").onclick=async function(){if(!M[id]||!confirm("Remove this photo and go back to the default?"))return;try{await api("DELETE",id);delete M[id];paint(id)}catch(e){msg(e.message)}};return d}
+function build(){var m=$("main");m.innerHTML="";SEC.forEach(function(s){var pre=typeof s[2]==="string"?s[2]:s[3]?s[3]:null,slots=Array.isArray(s[2])?s[2]:[];
+ if(pre)for(var i=0;i<8;i++)slots.push([pre+"-"+i,"Slot "+(i+1)]);
+ var h=document.createElement("div");h.innerHTML='<div class="sec-h"><div><h2>'+s[0]+'</h2><p class="hint">'+(s[1]||"")+'</p></div>'+(pre?'<label class="btn">Upload several<input type="file" accept="image/*" multiple hidden></label>':"")+'</div>';
+ m.appendChild(h);var g=document.createElement("div");g.className="grid";slots.forEach(function(x){g.appendChild(slotEl(x[0],x[1]))});m.appendChild(g);
+ if(pre)h.querySelector("input").onchange=async function(e){var fs=[].slice.call(e.target.files),free=slots.map(function(x){return x[0]}).filter(function(k){return!M[k]});e.target.value="";
+  if(fs.length>free.length)msg("Only "+free.length+" empty slots – extra photos skipped");for(var i=0;i<Math.min(fs.length,free.length);i++)await up(free[i],fs[i])}});
+ Object.keys(M).forEach(paint);document.querySelectorAll("[data-t]").forEach(function(t){if(!M[t.dataset.t])t.textContent="Empty (default)"})}
+async function start(){try{await api("GET")}catch(e){sessionStorage.pw="";pw="";$("app").hidden=true;$("login").hidden=false;if(e.message)msg(e.message);return}
+ sessionStorage.pw=pw;$("login").hidden=true;$("app").hidden=false;M=await fetch("/api/photos?t="+Date.now()).then(function(r){return r.json()}).catch(function(){return{}});build()}
+$("go").onclick=function(){pw=$("pw").value;start()};$("pw").onkeydown=function(e){if(e.key==="Enter")$("go").click()};
+$("out").onclick=function(){sessionStorage.pw="";location.reload()};if(pw)start();
+</script></body></html>
